@@ -12,6 +12,9 @@ file(GLOB_RECURSE NANOID_SRC_FILES src/*.cpp)
 file(GLOB_RECURSE NANOID_INC_FILES inc/*.h)
 
 add_library(nanoid ${NANOID_SRC_FILES})
+
+set_property(TARGET nanoid PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 target_include_directories(nanoid PUBLIC inc)
 target_link_libraries(nanoid Threads::Threads)
 #target_compile_options(nanoid PRIVATE
