@@ -1,72 +1,95 @@
 cmake_minimum_required(VERSION 3.5)
-project (nanoid_cpp
-    VERSION 2.1.0
-    )
-
+project(nanoid_cpp
+  VERSION 2.1.0
+)
 set(CMAKE_CXX_STANDARD 11)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
-option(BUILD_TESTS "Build nanoid unit tests" ON)
-option(BUILD_EXAMPLES "Build nanoid usage examples" ON)
 
 add_subdirectory(vendor/catch2)
 
 file(GLOB_RECURSE NANOID_SRC_FILES src/*.cpp)
 file(GLOB_RECURSE NANOID_INC_FILES inc/*.h)
 
-add_library(nanoid ${NANOID_SRC_FILES})
-target_include_directories(nanoid PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
-  $<INSTALL_INTERFACE:inc>)
-target_link_libraries(nanoid Threads::Threads)
-#target_compile_options(nanoid PRIVATE
-#  $<$<CXX_COMPILER_ID:MSVC>:/W4>
-#  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic>
-#)
+function(create_project SUBPROJECT_TARGET)
+  add_library(${SUBPROJECT_TARGET} ${NANOID_SRC_FILES})
+  target_include_directories(${SUBPROJECT_TARGET} PUBLIC inc)
+  target_link_libraries(${SUBPROJECT_TARGET} Threads::Threads)
 
-#############################################
-# Examples
-if (BUILD_EXAMPLES)
-    add_subdirectory(examples)
-    message(STATUS "Added examples to build")
+  # target_compile_options(nanoid PRIVATE
+  # $<$<CXX_COMPILER_ID:MSVC>:/W4>
+  # $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -pedantic>
+  # )
+  set_target_properties(${SUBPROJECT_TARGET} PROPERTIES FOLDER "third-party")
+  set_property(TARGET ${SUBPROJECT_TARGET} PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+  # ###############################################################################
+  # Compile and link options
+  # ###############################################################################
+  if(MSVC)
+    if(ARGV1 STREQUAL "static")
+      set_target_properties(${SUBPROJECT_TARGET} PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      )
+    else()
+      set_target_properties(${SUBPROJECT_TARGET} PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+      )
+    endif()
+
+    target_compile_options(${SUBPROJECT_TARGET} PRIVATE
+      $<$<CONFIG:Debug>:
+      ${DEFAULT_CXX_COMPILER_OPTIMIZATION_DEBUG};
+      # ${DEFAULT_CXX_DEBUG_RUNTIME_LIBRARY};
+      ${DEFAULT_CXX_DEBUG_SANITIZER};
+      ${DEFAULT_CXX_DEBUG_RUNTIME_CHECKS};
+      >
+      $<$<CONFIG:Release,RelWithDebInfo>:
+      ${DEFAULT_CXX_COMPILER_OPTIMIZATION_RELEASE};
+      >
+      ${DEFAULT_CXX_CALLING_CONVENTION};
+      ${DEFAULT_CXX_COMPILER_OPTIONS};
+      ${DEFAULT_CXX_DEBUG_INFORMATION_FORMAT};
+      ${DEFAULT_CXX_EXCEPTION_HANDLING};
+      ${DEFAULT_CXX_FLOATINGPOINT};
+      ${DEFAULT_CXX_SECURITY_CHECKS};
+      ${DEFAULT_CXX_STANDARDS_CONFORMANCE};
+      ${DEFAULT_CXX_WARNING_LEVEL};
+    )
+
+    target_link_options(${SUBPROJECT_TARGET} PRIVATE
+      $<$<CONFIG:Release,RelWithDebInfo>:
+      ${DEFAULT_CXX_LINKER_OPTIMIZATION_RELEASE};
+      /MACHINE:X64;
+      >
+      /SUBSYSTEM:CONSOLE;
+    )
+  else()
+    target_compile_options(${PROJECT_NAME} PRIVATE
+
+      # clang/GCC warnings
+      $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:GNU>>:-Wall -Wextra -Wunused -Werror>
+      $<$<AND:$<CXX_COMPILER_ID:GNU>,$<NOT:$<BOOL:${MINGW}>>>:-rdynamic>
+
+      # $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:GNU>>:-stdlib=libstdc++>
+    )
+  endif()
+endfunction()
+
+create_project(nanoid static)
+
+if(MSVC)
+  create_project(nanoid-shared)
 endif()
 
-#############################################
-# Install
-install(DIRECTORY inc/nanoid DESTINATION include)
-install(TARGETS nanoid EXPORT nanoid-targets)
-install(EXPORT nanoid-targets DESTINATION lib/cmake/nanoid)
-
-# # Config files for find_package()
-include(CMakePackageConfigHelpers)
-configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Config.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}/nanoid-config.cmake"
-  INSTALL_DESTINATION lib/cmake/nanoid)
-write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/nanoid-version.cmake"
-  VERSION "2.1.0"
-  COMPATIBILITY AnyNewerVersion)
-install(FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/nanoid-config.cmake"
-  "${CMAKE_CURRENT_BINARY_DIR}/nanoid-version.cmake"
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindNanoid.cmake"
-  DESTINATION lib/cmake/nanoid)
-export(EXPORT nanoid-targets
-  FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/nanoid-targets.cmake")
-
-
-#############################################
+# ############################################
 # Unit tests
-if (BUILD_TESTS)
-    enable_testing()
-    add_executable(nanoid_tests tests/unit_tests.cpp)
+enable_testing()
+add_executable(nanoid_tests EXCLUDE_FROM_ALL tests/unit_tests.cpp)
 
-    target_link_libraries(nanoid_tests
-            nanoid
-            Catch2::Test
-            )
-
-    add_test(test_all nanoid_tests)
-    message(STATUS "Added tests to build")
-endif()
+target_link_libraries(nanoid_tests
+  nanoid
+  Catch2::Test
+)
+add_test(test_all nanoid_tests)
+set_target_properties(nanoid_tests PROPERTIES FOLDER "third-party")
