@@ -65,7 +65,7 @@ function(create_project SUBPROJECT_TARGET)
       /SUBSYSTEM:CONSOLE;
     )
   else()
-    target_compile_options(${PROJECT_NAME} PRIVATE
+    target_compile_options(${SUBPROJECT_TARGET} PRIVATE
 
       # clang/GCC warnings
       $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:GNU>>:-Wall -Wextra -Wunused -Werror>
